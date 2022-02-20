@@ -3,7 +3,7 @@ import express from 'express'
 import cors from 'cors'
 import bodyParser from 'body-parser'
 
-import { logReq, logRes, getRandomInt } from './utils/index.js'
+import { logReq, logRes, logErr, getRandomInt } from './utils/index.js'
 
 const app = express()
 
@@ -15,8 +15,30 @@ const addMinutesToFlightDate = (flightDate) => {
 	return new Date(new Date(flightDate).getTime() + getRandomInt(5) * 60000)
 }
 
-app.post('/LandingFlightData', (req, res) => {
-	const flight = req.body.flight
+const processDescendingBoardUpdate = async (flight) => {
+	logReq('AirstripState')
+	const airstripState = await (
+		await fetch('http://localhost:4002/AirstripState')
+	).json()
+	logRes('AirstripState', airstripState)
+
+	switch (airstripState) {
+		case 'Busy':
+			return {
+				...flight,
+				time: addMinutesToFlightDate(flight.time),
+				status: 'Waiting for landing',
+			}
+		case 'Free':
+			return { ...flight, status: 'Landing' }
+		default:
+			logErr('Invalid airstripState')
+			return flight
+	}
+}
+
+app.post('/LandingFlightData', async (req, res) => {
+	const flight = req.body
 	logReq('LandingFlightData', flight)
 
 	if (flight.status === 'In Flight') {
@@ -28,14 +50,7 @@ app.post('/LandingFlightData', (req, res) => {
 		flight.status === 'Descending' ||
 		flight.status === 'Waiting for landing'
 	) {
-		const updatedFlight =
-			new Date().getTime() % 2 === 0 // здесь должен быть запрос к TowerControl. Спрашиваем свободна ли полоса для посадки
-				? { ...flight, status: 'Landing' }
-				: {
-						...flight,
-						time: addMinutesToFlightDate(flight.time),
-						status: 'Waiting for landing',
-				  }
+		const updatedFlight = await processDescendingBoardUpdate(flight)
 
 		logRes('LandingFlightData', updatedFlight)
 		res.json(updatedFlight)
@@ -50,31 +65,37 @@ app.post('/LandingFlightData', (req, res) => {
 	}
 })
 
-app.post('/TakingOffFlightData', (req, res) => {
-	const flight = req.body.flight
+const processTakingOffBoardUpdate = async (flight) => {
+	logReq('AirstripState')
+	const airstripState = await (
+		await fetch('http://localhost:4002/AirstripState')
+	).json()
+	logRes('AirstripState', airstripState)
+
+	switch (airstripState) {
+		case 'Busy':
+			return {
+				...flight,
+				time: addMinutesToFlightDate(flight.time),
+				status: 'Waiting for take off',
+			}
+		case 'Free':
+			return { ...flight, status: 'In Flight' }
+		default:
+			logErr('Invalid airstripState')
+			return flight
+	}
+}
+
+app.post('/TakingOffFlightData', async (req, res) => {
+	const flight = req.body
 	logReq('TakingOffFlightData', flight)
 
-	if (flight.status === 'In Airport') {
-		const updatedFlight =
-			new Date().getTime() % 2 === 0 // здесь должен быть запрос к TowerControl. Спрашиваем свободна ли полоса для взлёта
-				? { ...flight, status: 'In Flight' }
-				: {
-						...flight,
-						time: addMinutesToFlightDate(flight.time),
-						status: 'Waiting for take off',
-				  }
-
-		logRes('TakingOffFlightData', updatedFlight)
-		res.json(updatedFlight)
-	} else if (flight.status === 'Waiting for take off') {
-		const updatedFlight =
-			new Date().getTime() % 2 === 0 // здесь должен быть запрос к TowerControl. Спрашиваем свободна ли полоса для взлёта
-				? { ...flight, status: 'In Flight' }
-				: {
-						...flight,
-						time: addMinutesToFlightDate(flight.time),
-						status: 'Waiting for take off',
-				  }
+	if (
+		flight.status === 'In Airport' ||
+		flight.status === 'Waiting for take off'
+	) {
+		let updatedFlight = await processTakingOffBoardUpdate(flight)
 
 		logRes('TakingOffFlightData', updatedFlight)
 		res.json(updatedFlight)
