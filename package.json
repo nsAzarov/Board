@@ -1,5 +1,5 @@
 {
-	"name": "info-panel",
+	"name": "board",
 	"version": "1.0.0",
 	"description": "Board",
 	"main": "server.js",
