@@ -88,8 +88,20 @@ const processTakingOffBoardUpdate = async (flight) => {
 }
 
 app.post('/TakingOffFlightData', async (req, res) => {
-	const flight = req.body
+	let flight = req.body
 	logReq('TakingOffFlightData', flight)
+
+	logReq('CurrentTicketsState')
+	const currentTicketsState = await (
+		await fetch('http://localhost:4006/CurrentTicketsState')
+	).json()
+	logRes('CurrentTicketsState', currentTicketsState)
+
+	const registered = currentTicketsState.find(
+		(x) => x.flight === flight.flight
+	).registered
+
+	flight = { ...flight, registered }
 
 	if (
 		flight.status === 'In Airport' ||
