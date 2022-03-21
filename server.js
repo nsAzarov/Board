@@ -15,6 +15,15 @@ const addMinutesToFlightDate = (flightDate) => {
 	return new Date(new Date(flightDate).getTime() + getRandomInt(5) * 60000)
 }
 
+const sendLandingFlightEvent = async (data) => {
+	logReq('AddLandingFlightEvent')
+	await fetch('http://localhost:4007/AddLandingFlightEvent', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(data),
+	})
+}
+
 const processDescendingBoardUpdate = async (flight) => {
 	logReq('AirstripState')
 	const airstripState = await (
@@ -30,6 +39,7 @@ const processDescendingBoardUpdate = async (flight) => {
 				status: 'Waiting for landing',
 			}
 		case 'Free':
+			sendLandingFlightEvent({ flight: flight.flight, status: 'Landing' })
 			return { ...flight, status: 'Landing' }
 		default:
 			logErr('Invalid airstripState')
@@ -65,6 +75,15 @@ app.post('/LandingFlightData', async (req, res) => {
 	}
 })
 
+const sendTakingOffFlightEvent = async (data) => {
+	logReq('AddTakingOffFlightEvent')
+	await fetch('http://localhost:4007/AddTakingOffFlightEvent', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(data),
+	})
+}
+
 const processTakingOffBoardUpdate = async (flight) => {
 	logReq('AirstripState')
 	const airstripState = await (
@@ -80,6 +99,11 @@ const processTakingOffBoardUpdate = async (flight) => {
 				status: 'Waiting for take off',
 			}
 		case 'Free':
+			sendTakingOffFlightEvent({
+				flight: flight.flight,
+				status: 'In Flight',
+				registered: flight.registered,
+			})
 			return { ...flight, status: 'In Flight' }
 		default:
 			logErr('Invalid airstripState')
@@ -97,11 +121,12 @@ app.post('/TakingOffFlightData', async (req, res) => {
 	).json()
 	logRes('CurrentTicketsState', currentTicketsState)
 
-	const registered = currentTicketsState.find(
+	const flightInRegisteredTickets = currentTicketsState.find(
 		(x) => x.flight === flight.flight
-	).registered
-
-	flight = { ...flight, registered }
+	)
+	if (flightInRegisteredTickets) {
+		flight = { ...flight, registered: flightInRegisteredTickets.registered }
+	}
 
 	if (
 		flight.status === 'In Airport' ||
