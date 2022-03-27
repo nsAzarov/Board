@@ -15,6 +15,15 @@ const addMinutesToFlightDate = (flightDate) => {
 	return new Date(new Date(flightDate).getTime() + getRandomInt(5) * 60000)
 }
 
+const sendWaitingForLandingFlightEvent = async (data) => {
+	logReq('AddWaitingForLandingFlightEvent')
+	await fetch('http://localhost:4007/AddWaitingForLandingFlightEvent', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(data),
+	})
+}
+
 const sendLandingFlightEvent = async (data) => {
 	logReq('AddLandingFlightEvent')
 	await fetch('http://localhost:4007/AddLandingFlightEvent', {
@@ -33,13 +42,19 @@ const processDescendingBoardUpdate = async (flight) => {
 
 	switch (airstripState) {
 		case 'Busy':
+			const time = addMinutesToFlightDate(flight.time)
+			await sendWaitingForLandingFlightEvent({
+				flight: flight.flight,
+				time,
+				status: 'Waiting for landing',
+			})
 			return {
 				...flight,
-				time: addMinutesToFlightDate(flight.time),
+				time,
 				status: 'Waiting for landing',
 			}
 		case 'Free':
-			sendLandingFlightEvent({ flight: flight.flight, status: 'Landing' })
+			await sendLandingFlightEvent({ flight: flight.flight, status: 'Landing' })
 			return { ...flight, status: 'Landing' }
 		default:
 			logErr('Invalid airstripState')
@@ -75,6 +90,15 @@ app.post('/LandingFlightData', async (req, res) => {
 	}
 })
 
+const sendWaitingForTakeOffFlightEvent = async (data) => {
+	logReq('AddWaitingForTakeOffFlightEvent')
+	await fetch('http://localhost:4007/AddWaitingForTakeOffFlightEvent', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(data),
+	})
+}
+
 const sendTakingOffFlightEvent = async (data) => {
 	logReq('AddTakingOffFlightEvent')
 	await fetch('http://localhost:4007/AddTakingOffFlightEvent', {
@@ -93,13 +117,18 @@ const processTakingOffBoardUpdate = async (flight) => {
 
 	switch (airstripState) {
 		case 'Busy':
+			await sendWaitingForTakeOffFlightEvent({
+				flight: flight.flight,
+				status: 'Waiting for take off',
+				registered: flight.registered,
+			})
 			return {
 				...flight,
 				time: addMinutesToFlightDate(flight.time),
 				status: 'Waiting for take off',
 			}
 		case 'Free':
-			sendTakingOffFlightEvent({
+			await sendTakingOffFlightEvent({
 				flight: flight.flight,
 				status: 'In Flight',
 				registered: flight.registered,
